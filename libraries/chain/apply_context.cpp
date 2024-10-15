@@ -108,6 +108,12 @@ void apply_context::exec_one()
                   counter = 0;
                }
                if( itr->delta > 0 && itr->account != receiver ) {
+
+                  // **Roa change**
+                  if( itr->account == "sysio.roa"_n ) {
+                     // Allow increasing RAM usage of sysio.roa without authorization 
+                     continue;
+                  }
                   SYS_ASSERT( not_in_notify_context, unauthorized_ram_usage_increase,
                               "unprivileged contract cannot increase RAM usage of another account within a notify context: ${account}",
                               ("account", itr->account)
@@ -721,16 +727,38 @@ vector<account_name> apply_context::get_active_producers() const {
 }
 
 void apply_context::update_db_usage( const account_name& payer, int64_t delta ) {
+   // if( delta > 0 ) {
+   //    if( !(privileged || payer == account_name(receiver)
+   //             || control.is_builtin_activated( builtin_protocol_feature_t::ram_restrictions ) ) )
+   //    {
+   //       SYS_ASSERT( control.is_ram_billing_in_notify_allowed() || (receiver == act->account),
+   //                   subjective_block_production_exception, "Cannot charge RAM to other accounts during notify." );
+   //       require_authorization( payer );
+   //    }
+   // }
+   // add_ram_usage(payer, delta);
+
+   // ** Roa changes ** Maybe this is where we add policy usage updates using payer? So WL contract payer is contract, NON-WL contract payer is user.
+   if (delta == 0) {
+      return;
+   }
+
+   account_name ram_payer = payer;
+   if (control.is_ram_payer_redirected()) {
+      ram_payer = "sysio.roa"_n;
+   } 
+   
    if( delta > 0 ) {
       if( !(privileged || payer == account_name(receiver)
-               || control.is_builtin_activated( builtin_protocol_feature_t::ram_restrictions ) ) )
+               || control.is_builtin_activated( builtin_protocol_feature_t::ram_restrictions ) 
+               || ram_payer == "sysio.roa"_n) )
       {
          SYS_ASSERT( control.is_ram_billing_in_notify_allowed() || (receiver == act->account),
                      subjective_block_production_exception, "Cannot charge RAM to other accounts during notify." );
-         require_authorization( payer );
+         require_authorization( ram_payer );
       }
    }
-   add_ram_usage(payer, delta);
+   add_ram_usage(ram_payer, delta);
 }
 
 
@@ -1048,9 +1076,19 @@ uint64_t apply_context::next_auth_sequence( account_name actor ) {
 }
 
 void apply_context::add_ram_usage( account_name account, int64_t ram_delta ) {
-   trx_context.add_ram_usage( account, ram_delta );
+   // trx_context.add_ram_usage( account, ram_delta );
 
-   auto p = _account_ram_deltas.emplace( account, ram_delta );
+   // auto p = _account_ram_deltas.emplace( account, ram_delta );
+   // if( !p.second ) {
+   //    p.first->delta += ram_delta;
+   // }
+   
+   // **Roa changes**
+   account_name ram_payer = control.is_ram_payer_redirected() ? "sysio.roa"_n : account;
+
+   trx_context.add_ram_usage( ram_payer, ram_delta );
+
+   auto p = _account_ram_deltas.emplace( ram_payer, ram_delta );
    if( !p.second ) {
       p.first->delta += ram_delta;
    }

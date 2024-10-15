@@ -122,7 +122,16 @@ void apply_sysio_newaccount(apply_context& context) {
       dm_logger->on_ram_trace(RAM_EVENT_ID("${name}", ("name", create.name)), "account", "add", "newaccount");
    }
 
-   context.add_ram_usage(create.name, ram_delta);
+   // **Roa change**
+   account_name ram_payer;
+   if(context.control.is_ram_payer_redirected()) {
+      // RAM redirection is active; charge sysio.roa
+      ram_payer = "sysio_roa"_n;
+   } else {
+      ram_payer = create.creator;
+   }
+   
+   context.add_ram_usage(ram_payer, ram_delta);
 
 } FC_CAPTURE_AND_RETHROW( (create) ) }
 

@@ -6,6 +6,7 @@
 #include <sysio/chain/deep_mind.hpp>
 #include <boost/tuple/tuple_io.hpp>
 #include <sysio/chain/database_utils.hpp>
+#include <sysio/chain/account_object.hpp>
 #include <algorithm>
 
 namespace sysio { namespace chain { namespace resource_limits {
@@ -207,8 +208,17 @@ void resource_limits_manager::add_pending_ram_usage( const account_name account,
    if (ram_delta == 0) {
       return;
    }
+   
+   // **Roa changes**
+   // Redirect RAM usage to sysio.roa
+   account_name ram_payer = account;
 
-   const auto& usage  = _db.get<resource_usage_object,by_owner>( account );
+   if (is_ram_payer_redirected()) {
+      // Redirect RAM usage to sysio.roa after the toggle is set
+      ram_payer = "sysio.roa"_n;
+   }
+
+   const auto& usage  = _db.get<resource_usage_object,by_owner>( ram_payer );
 
    SYS_ASSERT( ram_delta <= 0 || UINT64_MAX - usage.ram_usage >= (uint64_t)ram_delta, transaction_exception,
               "Ram usage delta would overflow UINT64_MAX");
@@ -219,12 +229,24 @@ void resource_limits_manager::add_pending_ram_usage( const account_name account,
       u.ram_usage += ram_delta;
 
       if (auto dm_logger = _get_deep_mind_logger()) {
-         dm_logger->on_ram_event(account, u.ram_usage, ram_delta);
+         dm_logger->on_ram_event(ram_payer, u.ram_usage, ram_delta);
       }
    });
 }
 
 void resource_limits_manager::verify_account_ram_usage( const account_name account )const {
+   // **Roa change** uncomment this to remove RAM limits on sysio.roa - NEED TO TEST
+   // if (account == "sysio.roa"_n) {
+   //    // Exempt sysio.roa from RAM limits
+   //    return;
+   // }
+
+   // ** Roa change ** since users aren't charged RAM we don't need to check if they are exceeding usage IF is_ram_payer_redirected() returns true, otherwise proceed as normal.
+   if (is_ram_payer_redirected() && account != "sysio.roa"_n) {
+      // Since users aren't charged or tracked for RAM, skip verification for user accounts
+      return;
+   }
+
    int64_t ram_bytes; int64_t net_weight; int64_t cpu_weight;
    get_account_limits( account, ram_bytes, net_weight, cpu_weight );
    const auto& usage  = _db.get<resource_usage_object,by_owner>( account );
@@ -514,6 +536,11 @@ std::pair<account_resource_limit, bool> resource_limits_manager::get_account_net
    arl.used = impl::downgrade_cast<int64_t>(net_used_in_window);
    arl.max = impl::downgrade_cast<int64_t>(max_user_use_in_window);
    return {arl, greylisted};
+}
+
+// **Roa change** allow us to check if the sysio.roa account exists. If it does, redirect RAM charges.
+bool resource_limits_manager::is_ram_payer_redirected() const {
+   return _db.find<account_object, sysio::chain::by_name>("sysio.roa"_n) != nullptr;
 }
 
 } } } /// sysio::chain::resource_limits

@@ -372,6 +372,10 @@ namespace sysio { namespace chain {
 
       void replace_producer_keys( const public_key_type& key );
       void replace_account_keys( name account, name permission, const public_key_type& key );
+      
+      // ** Roa Change **
+      bool is_ram_payer_redirected() const;
+      void set_ram_payer_redirected(bool redirected);
 
       private:
          friend class apply_context;
@@ -381,6 +385,8 @@ namespace sysio { namespace chain {
 
          std::unique_ptr<controller_impl> my;
 
+         // ** Roa Change **
+         bool _is_ram_payer_redirected = false;
    };
 
 } }  /// sysio::chain

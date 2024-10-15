@@ -110,6 +110,9 @@ namespace sysio { namespace chain {
       private:
          chainbase::database&         _db;
          std::function<deep_mind_handler*()> _get_deep_mind_logger;
+
+         // **Roa change**
+         bool is_ram_payer_redirected() const;
    };
 } } } /// sysio::chain
 

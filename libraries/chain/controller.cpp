@@ -1622,6 +1622,13 @@ struct controller_impl {
       pending->_block_status = s;
       pending->_producer_block_id = producer_block_id;
 
+      // **Roa changes** Check if sysio.roa exists and set the flag to true if it exists.
+      if (!self.is_ram_payer_redirected()) {
+         if (db.find<account_object, by_name>("sysio.roa"_n)) {
+            self.set_ram_payer_redirected(true);
+         }
+      }
+
       auto& bb = std::get<building_block>(pending->_block_stage);
       const auto& pbhs = bb._pending_block_header_state;
 
@@ -3570,6 +3577,15 @@ void controller::replace_account_keys( name account, name permission, const publ
    int64_t new_size = (int64_t)(chain::config::billable_size_v<permission_object> + perm->auth.get_billable_size());
    rlm.add_pending_ram_usage(account, new_size - old_size);
    rlm.verify_account_ram_usage(account);
+}
+
+// **Roa Changes**
+bool controller::is_ram_payer_redirected() const {
+   return _is_ram_payer_redirected;
+}
+
+void controller::set_ram_payer_redirected(bool redirected) {
+   _is_ram_payer_redirected = redirected;
 }
 
 /// Protocol feature activation handlers:

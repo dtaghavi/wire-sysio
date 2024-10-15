@@ -350,10 +350,15 @@ namespace sysio { namespace chain {
          }
       }
 
-      // auto& rl = control.get_mutable_resource_limits_manager();
-      // for( auto a : validate_ram_usage ) {
-      //    rl.verify_account_ram_usage( a );
-      // }
+      // **Roa changes**
+      auto& rl = control.get_mutable_resource_limits_manager();
+      for( auto a : validate_ram_usage ) {
+         if (control.is_ram_payer_redirected() && a != "sysio.roa"_n) {
+            // Skip verification for user accounts after RAM redirection starts
+            continue;
+         }
+         rl.verify_account_ram_usage( a );
+      }
 
       // // Calculate the new highest network usage and CPU time that all of the billed accounts can afford to be billed
       // int64_t account_net_limit = 0;
@@ -555,11 +560,30 @@ namespace sysio { namespace chain {
    }
 
    void transaction_context::add_ram_usage( account_name account, int64_t ram_delta ) {
+      // auto& rl = control.get_mutable_resource_limits_manager();
+      // rl.add_pending_ram_usage( account, ram_delta );
+      // if( ram_delta > 0 ) {
+      //    validate_ram_usage.insert( account );
+      // }
+
+      // **Roa Changes**
       auto& rl = control.get_mutable_resource_limits_manager();
-      rl.add_pending_ram_usage( account, ram_delta );
-      if( ram_delta > 0 ) {
-         validate_ram_usage.insert( account );
+      if (control.is_ram_payer_redirected()) {
+         // Redirect RAM charges to sysio.roa
+         rl.add_pending_ram_usage( "sysio.roa"_n, ram_delta );
+         if( ram_delta > 0 ) {
+            validate_ram_usage.insert( "sysio.roa"_n );
+         }
+
+         ilog("RAM usage changed by ${delta} bytes for sysio.roa", ("delta", ram_delta));
+      } else {
+         // Use default behavior during boot
+         rl.add_pending_ram_usage( account, ram_delta );
+         if( ram_delta > 0 ) {
+            validate_ram_usage.insert( account );
+         }
       }
+      
    }
 
    uint32_t transaction_context::update_billed_cpu_time( fc::time_point now ) {
